@@ -2,16 +2,73 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8" />
-  <title>飞行方向判断实验网页版</title>
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
-  <script src="flight-direction-web_sketch_Version2.js"></script>
-  <style>
-    body { margin:0; background:#fff; }
-    canvas { display:block; margin:auto; }
-    #download-btn { position:fixed; top:20px; right:20px; padding:10px 20px; font-size:18px; display:none;}
-  </style>
+  <title>实验 mark 记录与导出</title>
 </head>
 <body>
-  <button id="download-btn">下载结果CSV</button>
+  <button onclick="connectSerial()">连接设备</button>
+  <button onclick="sendMark(81, '实验开始')">实验开始打81</button>
+  <button onclick="sendMark(1, '简单开始')">简单开始打1</button>
+  <button onclick="sendMark(2, '简单结束')">简单结束打2</button>
+  <button onclick="sendMark(3, '中等开始')">中等开始打3</button>
+  <button onclick="sendMark(4, '中等结束')">中等结束打4</button>
+  <button onclick="sendMark(5, '困难开始')">困难开始打5</button>
+  <button onclick="sendMark(6, '困难结束')">困难结束打6</button>
+  <button onclick="downloadMarkCSV()">下载mark记录CSV</button>
+  <script>
+    let port = null;
+    let markRecords = [];
+
+    async function connectSerial() {
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        alert('串口已连接');
+      } catch (e) {
+        port = null;
+        alert('串口连接失败，仍可本地记录和导出mark');
+      }
+    }
+
+    async function sendMark(markCode, markLabel) {
+      // 1. 记录 mark 事件
+      markRecords.push({
+        time: new Date().toLocaleString(),
+        code: markCode,
+        label: markLabel
+      });
+      // 2. 发送串口数据（如有连接）
+      if (port) {
+        try {
+          const writer = port.writable.getWriter();
+          const data = new Uint8Array([markCode]);
+          await writer.write(data);
+          writer.releaseLock();
+        } catch (e) {
+          alert('串口发送失败，但已本地记录mark');
+        }
+      }
+      alert(`已记录mark：${markLabel} (${markCode})`);
+    }
+
+    function downloadMarkCSV() {
+      if (markRecords.length === 0) {
+        alert('没有 mark 数据');
+        return;
+      }
+      let csv = "时间,mark代码,mark说明\n";
+      markRecords.forEach(rec => {
+        csv += `${rec.time},${rec.code},${rec.label}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "marks.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  </script>
 </body>
 </html>
