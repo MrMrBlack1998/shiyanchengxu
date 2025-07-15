@@ -1,4 +1,4 @@
-// 飞行方向判断实验网页版核心逻辑
+// 飞行方向判断实验网页版核心逻辑（自动mark后台实现）
 let planeImg, instrImg;
 let SCREEN_WIDTH = 1680, SCREEN_HEIGHT = 850;
 let phase = "input"; // input, instruction, practice, block1, block2, block3, finish
@@ -21,6 +21,58 @@ let feedbackTimer = 0;
 let fixationTimer = 0;
 let showFeedback = false;
 
+// 自动mark相关
+let port = null;
+let markRecords = [];
+
+// 串口连接函数（如需，实验前可手动或自动连接）
+async function connectSerial() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 9600 });
+  } catch (e) {
+    port = null;
+  }
+}
+
+// 自动mark记录函数
+async function autoMark(markCode, markLabel) {
+  markRecords.push({
+    time: new Date().toLocaleString(),
+    code: markCode,
+    label: markLabel
+  });
+  if (port) {
+    try {
+      const writer = port.writable.getWriter();
+      const data = new Uint8Array([markCode]);
+      await writer.write(data);
+      writer.releaseLock();
+    } catch (e) {
+      // 串口发送失败，忽略
+    }
+  }
+}
+
+// 导出mark CSV的函数
+function downloadMarkCSV() {
+  if (markRecords.length === 0) return;
+  let csv = "时间,mark代码,mark说明\n";
+  markRecords.forEach(rec => {
+    csv += `${rec.time},${rec.code},${rec.label}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = "marks.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// 原有流程代码
 function preload() {
   planeImg = loadImage('flight.png');
   instrImg = loadImage('flight_instr.png');
@@ -31,7 +83,10 @@ function setup() {
   textAlign(CENTER, CENTER);
   textFont('SimHei');
   phase = "input";
-  document.getElementById("download-btn").onclick = downloadCSV;
+  document.getElementById("download-btn").onclick = function() {
+    downloadCSV();
+    downloadMarkCSV();
+  };
 }
 
 function draw() {
@@ -144,12 +199,17 @@ function keyTyped() {
         blockResults = [];
         phase = "fixation";
         fixationTimer = millis();
+        autoMark(81, '实验开始');
       } else if (phase === "blockRest") {
         currentBlock++;
         trialIdx = 0;
         blockResults = [];
         phase = "fixation";
         fixationTimer = millis();
+        // 根据实验阶段自动mark
+        if (currentBlock === 1) autoMark(1, '简单开始');
+        if (currentBlock === 2) autoMark(3, '中等开始');
+        if (currentBlock === 3) autoMark(5, '困难开始');
       }
     }
   } else if (phase === "trial" && !responded) {
@@ -226,6 +286,10 @@ function nextTrial() {
     fixationTimer = millis();
   } else {
     results = results.concat(blockResults);
+    // 自动mark阶段结束
+    if (currentBlock === 1) autoMark(2, '简单结束');
+    if (currentBlock === 2) autoMark(4, '中等结束');
+    if (currentBlock === 3) autoMark(6, '困难结束');
     if (currentBlock < blockParams.length-1) {
       phase = "blockRest";
     } else {
@@ -234,7 +298,7 @@ function nextTrial() {
   }
 }
 
-// 下载CSV
+// 下载CSV（实验数据+mark记录）
 function downloadCSV() {
   let timestamp = nf(year(),4)+nf(month(),2)+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2);
   let filename = `飞行方向判断实验_${subjectId}_${timestamp}.csv`;
