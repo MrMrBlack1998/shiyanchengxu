@@ -25,13 +25,15 @@ let showFeedback = false;
 let port = null;
 let markRecords = [];
 
-// 串口连接函数（如需，实验前可手动或自动连接）
+// 串口连接函数（实验开始弹窗，用户选COM3）
 async function connectSerial() {
   try {
     port = await navigator.serial.requestPort();
     await port.open({ baudRate: 9600 });
+    // 可选：alert('串口已连接！');
   } catch (e) {
     port = null;
+    alert('串口连接失败，可继续实验，但mark只本地记录');
   }
 }
 
@@ -194,6 +196,8 @@ function keyTyped() {
   } else if (phase === "instruction" || phase === "blockRest") {
     if (key === ' ') {
       if (phase === "instruction") {
+        // 在实验正式开始前弹窗连接串口（用户选COM3）
+        connectSerial();
         currentBlock = 0;
         trialIdx = 0;
         blockResults = [];
